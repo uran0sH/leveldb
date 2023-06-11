@@ -86,9 +86,13 @@ class VersionEdit {
   typedef std::set<std::pair<int, uint64_t>> DeletedFileSet;
 
   std::string comparator_;
+  // 日志编号
   uint64_t log_number_;
+  // 上一个日志编号
   uint64_t prev_log_number_;
+  // 下一个文件编号
   uint64_t next_file_number_;
+  // 最后的序列号
   SequenceNumber last_sequence_;
   bool has_comparator_;
   bool has_log_number_;
@@ -97,7 +101,9 @@ class VersionEdit {
   bool has_last_sequence_;
 
   std::vector<std::pair<int, InternalKey>> compact_pointers_;
+  // 删除的文件，记录了 Level 和文件号
   DeletedFileSet deleted_files_;
+  // 新增的文件
   std::vector<std::pair<int, FileMetaData>> new_files_;
 };
 

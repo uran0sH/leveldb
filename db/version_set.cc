@@ -226,6 +226,7 @@ Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
       vset_->table_cache_, options);
 }
 
+/// 将所有 Level 的文件信息列表组成一个新的 MergingIteraotr
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
   // Merge all level zero files together since they may overlap
@@ -278,6 +279,8 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
   return a->number > b->number;
 }
 
+/// 根据 smallest_key 和 largest_key 来查找文件，再通过 table_cache_->Get 进行查找
+/// 查找到了则返回 SaveValue，否则返回 kFound
 void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                                  bool (*func)(void*, int, FileMetaData*)) {
   const Comparator* ucmp = vset_->icmp_.user_comparator();
@@ -467,6 +470,9 @@ bool Version::OverlapInLevel(int level, const Slice* smallest_user_key,
                                smallest_user_key, largest_user_key);
 }
 
+// 首先检查 SST 和 Level0 是否有重叠的 key 范围，有直接返回 0
+// 检查 Level + 1 层，同样检查是否有重叠的 key，有返回 Level
+// 检查level+2层和新文件有key范围重叠的文件，如果有重叠的文件总size超过阈值（默认为文件最大size的10倍）就返回level，如果没有，level加1，如果level不小于kMaxMemCompactLevel，也返回level
 int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                         const Slice& largest_user_key) {
   int level = 0;
@@ -1028,6 +1034,8 @@ void VersionSet::MarkFileNumberUsed(uint64_t number) {
   }
 }
 
+/// 0 层的文件是文件数量大于 4
+/// 其他层是文件总的大小超过 10^l MB
 void VersionSet::Finalize(Version* v) {
   // Precomputed best level for next compaction
   int best_level = -1;
@@ -1255,8 +1263,11 @@ Compaction* VersionSet::PickCompaction() {
 
   // We prefer compactions triggered by too much data in a level over
   // the compactions triggered by seeks.
+  // 分数更新发生在 VersionSet::Finalize()
   const bool size_compaction = (current_->compaction_score_ >= 1);
   const bool seek_compaction = (current_->file_to_compact_ != nullptr);
+  // 对于数据大小触发的 Compaction 会选取 compact_pointer_ 之后的，compact_point_ 
+  // 保存的是上一次 compact 完最后的 key
   if (size_compaction) {
     level = current_->compaction_level_;
     assert(level >= 0);
@@ -1298,6 +1309,7 @@ Compaction* VersionSet::PickCompaction() {
     assert(!c->inputs_[0].empty());
   }
 
+  // 扩大 compaction 的文件集合
   SetupOtherInputs(c);
 
   return c;
@@ -1383,6 +1395,7 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 }
 
 void VersionSet::SetupOtherInputs(Compaction* c) {
+  // Step 1
   const int level = c->level();
   InternalKey smallest, largest;
 
@@ -1397,6 +1410,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
   InternalKey all_start, all_limit;
   GetRange2(c->inputs_[0], c->inputs_[1], &all_start, &all_limit);
 
+  // Step 2
   // See if we can grow the number of inputs in "level" without
   // changing the number of "level+1" files we pick up.
   if (!c->inputs_[1].empty()) {
@@ -1430,6 +1444,7 @@ void VersionSet::SetupOtherInputs(Compaction* c) {
     }
   }
 
+  // Step 3
   // Compute the set of grandparent files that overlap this compaction
   // (parent == level+1; grandparent == level+2)
   if (level + 2 < config::kNumLevels) {
